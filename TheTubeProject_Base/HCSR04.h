@@ -5,7 +5,7 @@
 using namespace std;
 
 #define meas_factor 0.034 / 2
-#define meas_timout 55000 //55ms
+#define meas_timout 10000 //10ms (il faut environ 8ms pour une mesure de 1m (mesuré))
 
 /*You can calculate the range through the time interval between sending trigger signal and
 receiving echo signal. Formula: uS / 58 = centimeters or uS / 148 =inch; or: the

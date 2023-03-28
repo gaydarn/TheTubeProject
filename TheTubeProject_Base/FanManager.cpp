@@ -57,7 +57,7 @@ int FanManager::computeCurrentmA()
  // read the input on analog pin
   float analogValue = analogRead(_CurrentMeasPin);
 
-  return  int((analogValue/1023)*1300);
+  return  int((analogValue/ANALOG_MAX)*1300);
 }
 
 void FanManager::enableRotation(bool state)

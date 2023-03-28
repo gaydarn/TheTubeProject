@@ -4,6 +4,8 @@
 #include "mbed.h"
 using namespace std;
 
+#define ANALOG_MAX 4096
+
 class FanManager
 {
   public:
@@ -41,9 +43,10 @@ class FanManager
   //Definitions of the fans
   //This is the varible used to select the fan and it's divider,
   //set 1 for unipole hall effect sensor
-  //and 2 for bipole hall effect sensor
-  fanspec fanspace[3]={{0,1},{1,2},{2,8}};
-  const char _fanType = 1;
+  //set 2 for unipole hall effect sensor (R/F pulse detection)
+  //and 3 for bipole hall effect sensor
+  fanspec fanspace[4]={{0,1},{1,2},{2,4},{3,8}};
+  const char _fanType = 2;
 
 };
 

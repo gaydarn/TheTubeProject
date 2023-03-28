@@ -16,5 +16,5 @@ float Potentiometer::getValuePercent()
   sensorValue = ((sensorValue > ANALOG_MAX - _potValueMargin) ? ANALOG_MAX - _potValueMargin : sensorValue);
   sensorValue = ((sensorValue < _potValueMargin) ? _potValueMargin : sensorValue);
 
-  return (sensorValue-_potValueMargin/(ANALOG_MAX - 2*_potValueMargin))/10;
+  return (sensorValue-_potValueMargin/(ANALOG_MAX - 2*_potValueMargin))/40;
 }

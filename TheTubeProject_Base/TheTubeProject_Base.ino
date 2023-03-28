@@ -6,8 +6,12 @@
 #include "FanManager.h"
 #include "Potentiometer.h"
 #include "HCSR04.h"
+#include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
+#include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
+#include <SimpleTimer.h>
 
 #define MONITOR 
+#define NBR_DIG 2
 
 
 
@@ -36,7 +40,18 @@ bool ramp = false;
 int setpointRPM;
 int realSetpoint;
 String command;
+int counter=0;
 
+float _mainFanSpeed;
+float _secondaryFanSpeed;
+float _plotHeight;
+float _externalSetpoint;
+
+long int tExecSpeedTask;
+long int tExecPosTask;
+long int tExecUserTask;
+long int tExecMonTask;
+long int tTemp;
 
 FanManager mainFan(MainFanPWMPin,MainFanHallPin,MainFanEnablPin,MainFanCurrentPin);
 
@@ -58,13 +73,11 @@ void SecondaryFan_incRpmCounter()
 
 void setupFanInterrupts()
 {
-  interrupts(); 
-
   pinMode(mainFan.getHallPinNumber(), INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(mainFan.getHallPinNumber()), mainFan_incRpmCounter, RISING);
+  attachInterrupt(digitalPinToInterrupt(mainFan.getHallPinNumber()), mainFan_incRpmCounter, CHANGE);
 
   pinMode(secondaryFan.getHallPinNumber(), INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(secondaryFan.getHallPinNumber()), SecondaryFan_incRpmCounter, RISING);
+  attachInterrupt(digitalPinToInterrupt(secondaryFan.getHallPinNumber()), SecondaryFan_incRpmCounter, CHANGE);
 }
 
 
@@ -123,26 +136,110 @@ NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la 
 
 void speed_Ctrl_Task()
 {
-  mainFan.computeSpeedRPM();
-  secondaryFan.computeSpeedRPM();
+  tTemp = micros();
+  _mainFanSpeed = mainFan.computeSpeedRPM();
+  //_secondaryFanSpeed = secondaryFan.computeSpeedRPM();
   //TODO
+  tExecSpeedTask = micros() - tTemp;
 }
 
 void position_Ctrl_Task()
 {
-  heightSensor.measureDistance();
+  tTemp = micros();
+  _plotHeight = heightSensor.measureDistance();
   //TODO
+  tExecPosTask = micros() - tTemp;
 }
 
 void user_Ctrl_Task()
 {
-  consigneExterne.getValuePercent();
+  tTemp = micros();
+  _externalSetpoint = consigneExterne.getValuePercent(); //TODO AGC -> Should be here, but it seem analog read into interrupt dont work...Use continous ADC Read?
+
+  //Récupération de la commande
+  if(Serial.available())
+  {
+    command = Serial.readStringUntil('\n');
+         
+    if(command.equals("start"))
+    {
+      start = true;
+    }
+    else if(command.equals("inc"))
+    {
+      i++;
+    }
+    else if(command.equals("dec"))
+    {
+      i--;
+    }
+    else if(command.equals("ramp"))
+    {
+      ramp = !ramp;
+    }
+    else if(command.equals("stop"))
+    {
+      start = false;
+    }
+    else if(command.equals("reset"))
+    {
+      NVIC_SystemReset();                         // Reset the microcontroller
+    }
+    else
+    {
+      Serial.println("Invalid command");
+    }
+  }
+
   //TODO
+  tExecUserTask = micros() - tTemp;
 }
 
-void setup() {
+// Init NRF52 hard timer NRF_TIMER3
+NRF52_MBED_Timer ITimer(NRF_TIMER_4);
+// the soft timer object
+SimpleTimer timer;
+
+void HandlerTickTaskHard()
+{
+  // Call the different Tasks here inside ISR
+  // No Serial.print() can be used
+
+  speed_Ctrl_Task();
+  
+  if(counter % 2)
+  {
+    position_Ctrl_Task();
+  }  
+  counter++;
+}
+
+void HandlerTickTaskSoft() {
+    user_Ctrl_Task();
+}
+
+#define TIMER_INTERVAL_US        50000      // 1s = 1 000 000us
+
+
+void setup()
+{
+  analogReadResolution(12);
+  interrupts(); 
 
   setupFanInterrupts();
+
+  // Interval in microsecs
+  if (ITimer.attachInterruptInterval(TIMER_INTERVAL_US, HandlerTickTaskHard))
+  {
+    Serial.print(F("Starting hardware timer OK, millis() = ")); Serial.println(millis());
+  }
+  else
+  {
+    Serial.println(F("Can't set hardware timer. Select another freq. or timer"));
+  }  
+
+  timer.setInterval(200, HandlerTickTaskSoft);
+  
 
   Serial.begin(115200);
 }
@@ -151,41 +248,9 @@ void setup() {
 
 void loop() //MainTask
 {
-   
-//Récupération de la commande
-  if(Serial.available())
-  {
-    command = Serial.readStringUntil('\n');
-         
-    if(command.equals("start"))
-    {
-        start = true;
-    }
-    else if(command.equals("inc"))
-    {
-        i++;
-    }
-    else if(command.equals("dec"))
-    {
-        i--;
-    }
-    else if(command.equals("ramp"))
-    {
-        ramp = !ramp;
-    }
-    else if(command.equals("stop"))
-    {
-        start = false;
-    }
-    else if(command.equals("reset"))
-    {
-        NVIC_SystemReset();                         // Reset the microcontroller
-    }
-    else{
-        Serial.println("Invalid command");
-    }
-  }
-
+  tTemp = micros();
+  timer.run();
+ 
 //Application des actions demandées
   mainFan.enableRotation(start);
   secondaryFan.enableRotation(start);
@@ -209,31 +274,34 @@ void loop() //MainTask
   }
   realSetpoint = mainFan.setSpeed(setpointRPM);
   secondaryFan.setSpeed(setpointRPM);
-   
-  //Wait 1 second
-  delay(200);
-  //refreshInputTask();
+
 
  #ifdef MONITOR
  
-   //Prints the number calculated above
+   //Prints the number calculated in the different Tasks
   Serial.print ("cons_ext.:");
-  Serial.print (consigneExterne.getValuePercent());
+  Serial.print (_externalSetpoint, 1);
   Serial.print (",MainFanRpm:");
-  Serial.print (mainFan.computeSpeedRPM(), DEC);
+  Serial.print (_mainFanSpeed, 0);
   Serial.print (",SecondaryFanRpm:");
-  Serial.print (secondaryFan.computeSpeedRPM(), DEC);
+  Serial.print (_secondaryFanSpeed, 0);
   Serial.print (",setpointRPM:");
   Serial.print (setpointRPM, DEC);
   Serial.print (",realSetpoint:");
   Serial.print (realSetpoint, DEC);
   Serial.print (",HS_value:");
-  Serial.print (heightSensor.measureDistance(),DEC);
+  Serial.print (_plotHeight,1);
   Serial.print ("\r\n");
+  Serial.println ("Application timings: ");
+  Serial.println ("Speed Task: "+String(float(tExecSpeedTask)/1000)+" ms");
+  Serial.println ("Pos Task: "+String(float(tExecPosTask)/1000)+" ms");
+  Serial.println ("User Task: "+String(float(tExecUserTask)/1000)+" ms");
+  Serial.println ("Monitoring Task: "+String(float(tExecMonTask)/1000)+" ms");
   
 #endif
-  //pwm->write(consigneExterne.getValuePercent()/100);
-  //analogWrite(D3, consigneExterne.getValuePercent()*2.55);
-  //Serial.print(counter);
+  tExecMonTask = micros() - tTemp;
+ //Wait 1 second
+  delay(1000);
+  
   
 }

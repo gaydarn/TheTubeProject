@@ -2,7 +2,7 @@
 #define POTENTIOMETER_H
 #include "mbed.h"
 using namespace std;
-#define ANALOG_MAX 1023
+#define ANALOG_MAX 4096
 class Potentiometer
 {
   public:
