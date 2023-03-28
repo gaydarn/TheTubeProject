@@ -138,7 +138,7 @@ void speed_Ctrl_Task()
 {
   tTemp = micros();
   _mainFanSpeed = mainFan.computeSpeedRPM();
-  //_secondaryFanSpeed = secondaryFan.computeSpeedRPM();
+  _secondaryFanSpeed = secondaryFan.computeSpeedRPM();
   //TODO
   tExecSpeedTask = micros() - tTemp;
 }
@@ -273,7 +273,7 @@ void loop() //MainTask
     setpointRPM = 0;
   }
   realSetpoint = mainFan.setSpeed(setpointRPM);
-  secondaryFan.setSpeed(setpointRPM);
+  secondaryFan.setSpeed(8000);
 
 
  #ifdef MONITOR
@@ -301,7 +301,7 @@ void loop() //MainTask
 #endif
   tExecMonTask = micros() - tTemp;
  //Wait 1 second
-  delay(1000);
+  delay(400);
   
   
 }
