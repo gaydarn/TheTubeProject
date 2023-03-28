@@ -10,15 +10,9 @@
 #include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include <SimpleTimer.h>
 
-#define MONITOR 
-#define NBR_DIG 2
-
-
-
-
-//*********************************************************
-//***************MAIN**************************************
-//*********************************************************
+/*********************************************************
+           INSTANCIATION DES PERIPHERIQUES
+**********************************************************/
 #define MainFanEnablPin D2
 #define MainFanPWMPin D3
 #define MainFanHallPin D7
@@ -34,25 +28,6 @@
 #define HS_TrigPin D4
 #define HS_EchoPin D8
 
-int i=0;
-bool start = false;
-bool ramp = false;
-int setpointRPM;
-int realSetpoint;
-String command;
-int counter=0;
-
-float _mainFanSpeed;
-float _secondaryFanSpeed;
-float _plotHeight;
-float _externalSetpoint;
-
-long int tExecSpeedTask;
-long int tExecPosTask;
-long int tExecUserTask;
-long int tExecMonTask;
-long int tTemp;
-
 FanManager mainFan(MainFanPWMPin,MainFanHallPin,MainFanEnablPin,MainFanCurrentPin);
 
 FanManager secondaryFan(SecondaryFanPWMPin,SecondaryFanHallPin,SecondaryFanEnablPin,SecondaryFanCurrentPin);
@@ -60,6 +35,20 @@ FanManager secondaryFan(SecondaryFanPWMPin,SecondaryFanHallPin,SecondaryFanEnabl
 Potentiometer consigneExterne(PotentiometerPin);
 
 HCSR04 heightSensor(HS_TrigPin, HS_EchoPin);
+
+/*********************************************************
+          GESTION DES INTERRUPTIONS (HARDWARE)
+**********************************************************/
+/*
+Afin de pouvoir évaluer la vitesse des ventilateurs, il est
+nécéssaire de comter les impulsions des capteurs Hall des
+ventilateurs.
+La fonction de callback ne peut pas être une méthode de classe,
+a moins qu'elle soit statique. Comme on a deux ventilateur,
+On a choisi de créer des fonction de callback dans le code 
+principal, qui vont elle-même apeler en cascade les méthode
+des deux instances de ventilateurs.
+*/
 
 void mainFan_incRpmCounter()
 {
@@ -80,16 +69,17 @@ void setupFanInterrupts()
   attachInterrupt(digitalPinToInterrupt(secondaryFan.getHallPinNumber()), SecondaryFan_incRpmCounter, CHANGE);
 }
 
-
-
-
-
+/*********************************************************
+               GESTION DES TACHES ET TIMERS
+**********************************************************/
 /*
 Le programme est séparé en plusieurs tâches.
 Afin d'avoir un minimum de synchronisation dans l'ordre des opérations, 
 on utilisera un timer hardware principal, qui sera chargé d'éxécuter
-les différentes autres tâches avec un système de diviseurs.
-Seule la tâche de monitoring est séparée du reste et appelée dans la
+les différentes autres tâches critiques avec un système de diviseurs.
+La tâche user_Ctrl, moins critique au niveau du timing, sest gérée par un 
+timer software (moins précis, soft realtime)
+La tâche monitoring est séparée du reste et appelée dans la
 loop() arduino. Elle est rythmée par une pause, ce qui ne la rend pas temps réel.
 
 Vous pouvez librement adapter la porposition ci-dessous, mais n'oubliez pas de
@@ -131,7 +121,6 @@ monitoring_Task
   - Envoie la tramme sur le sortie serielle
 
 NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la base de l'application.
-
 */
 
 void speed_Ctrl_Task()
@@ -195,6 +184,13 @@ void user_Ctrl_Task()
   tExecUserTask = micros() - tTemp;
 }
 
+#define SPEED_TASK_PERIOD_MS 200
+#define POS_TASK_MUL  2 //Give position task time = POS_TASK_MUL*SPEED_TASK_PERIOD
+#define USER_TASK_MUL  4 //Give user task time = USER_TASK_MUL*SPEED_TASK_PERIOD
+#define MON_TASK_MUL  8 //Give monitoring task time = MON_TASK_MUL*SPEED_TASK_PERIOD
+
+#define TIMER_INTERVAL_US        SPEED_TASK_PERIOD_MS*1000      // 1s = 1 000 000us
+
 // Init NRF52 hard timer NRF_TIMER3
 NRF52_MBED_Timer ITimer(NRF_TIMER_4);
 // the soft timer object
@@ -207,7 +203,7 @@ void HandlerTickTaskHard()
 
   speed_Ctrl_Task();
   
-  if(counter % 2)
+  if(counter % POS_TASK_MUL)
   {
     position_Ctrl_Task();
   }  
@@ -218,40 +214,51 @@ void HandlerTickTaskSoft() {
     user_Ctrl_Task();
 }
 
-#define TIMER_INTERVAL_US        50000      // 1s = 1 000 000us
+/*********************************************************
+                      APPLICATION
+**********************************************************/
+#define MONITOR 
+#define NBR_DIG 2
 
+int i=0;
+bool start = false;
+bool ramp = false;
+int setpointRPM;
+int realSetpoint;
+String command;
+int counter=0;
+
+float _mainFanSpeed;
+float _secondaryFanSpeed;
+float _plotHeight;
+float _externalSetpoint;
+
+long int tExecSpeedTask;
+long int tExecPosTask;
+long int tExecUserTask;
+long int tExecMonTask;
+long int tTemp;
 
 void setup()
 {
   analogReadResolution(12);
+
   interrupts(); 
 
   setupFanInterrupts();
 
-  // Interval in microsecs
-  if (ITimer.attachInterruptInterval(TIMER_INTERVAL_US, HandlerTickTaskHard))
-  {
-    Serial.print(F("Starting hardware timer OK, millis() = ")); Serial.println(millis());
-  }
-  else
-  {
-    Serial.println(F("Can't set hardware timer. Select another freq. or timer"));
-  }  
+  ITimer.attachInterruptInterval(TIMER_INTERVAL_US, HandlerTickTaskHard);    
 
-  timer.setInterval(200, HandlerTickTaskSoft);
+  timer.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
   
-
   Serial.begin(115200);
 }
 
-
-
-void loop() //MainTask
+void loop() //monitoring_Task
 {
   tTemp = micros();
   timer.run();
  
-//Application des actions demandées
   mainFan.enableRotation(start);
   secondaryFan.enableRotation(start);
 
@@ -277,8 +284,6 @@ void loop() //MainTask
 
 
  #ifdef MONITOR
- 
-   //Prints the number calculated in the different Tasks
   Serial.print ("cons_ext.:");
   Serial.print (_externalSetpoint, 1);
   Serial.print (",MainFanRpm:");
@@ -297,11 +302,9 @@ void loop() //MainTask
   Serial.println ("Pos Task: "+String(float(tExecPosTask)/1000)+" ms");
   Serial.println ("User Task: "+String(float(tExecUserTask)/1000)+" ms");
   Serial.println ("Monitoring Task: "+String(float(tExecMonTask)/1000)+" ms");
-  
 #endif
   tExecMonTask = micros() - tTemp;
- //Wait 1 second
-  delay(400);
-  
-  
+
+  delay(SPEED_TASK_PERIOD_MS*MON_TASK_MUL);
+ 
 }
