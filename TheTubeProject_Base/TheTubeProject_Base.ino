@@ -13,6 +13,24 @@
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
 **********************************************************/
+int i=0;
+bool start = true;
+bool ramp = false;
+int setpointRPM;
+int realSetpoint;
+String command;
+
+float _mainFanSpeed;
+float _secondaryFanSpeed;
+float _plotHeight;
+float _externalSetpoint;
+
+long int tExecSpeedTask;
+long int tExecPosTask;
+long int tExecUserTask;
+long int tExecMonTask;
+long int tTemp;
+
 #define MainFanEnablPin D2
 #define MainFanPWMPin D3
 #define MainFanHallPin D7
@@ -195,6 +213,7 @@ void user_Ctrl_Task()
 NRF52_MBED_Timer ITimer(NRF_TIMER_4);
 // the soft timer object
 SimpleTimer timer;
+int counter=0;
 
 void HandlerTickTaskHard()
 {
@@ -219,25 +238,6 @@ void HandlerTickTaskSoft() {
 **********************************************************/
 #define MONITOR 
 #define NBR_DIG 2
-
-int i=0;
-bool start = false;
-bool ramp = false;
-int setpointRPM;
-int realSetpoint;
-String command;
-int counter=0;
-
-float _mainFanSpeed;
-float _secondaryFanSpeed;
-float _plotHeight;
-float _externalSetpoint;
-
-long int tExecSpeedTask;
-long int tExecPosTask;
-long int tExecUserTask;
-long int tExecMonTask;
-long int tTemp;
 
 void setup()
 {
