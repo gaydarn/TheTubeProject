@@ -9,6 +9,8 @@
 //#include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 //#include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include <SimpleTimer.h>
+#include <Button.h>
+#include <LED.h>
 
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
@@ -48,6 +50,12 @@ long int tTemp;
 #define HS_TrigPin D4
 #define HS_EchoPin D8
 
+#define BP1_SigPin D10
+#define BP1_LedPin D11
+
+#define BP2_SigPin D13
+#define BP2_LedPin D12
+
 FanManager mainFan(MainFanPWMPin,MainFanHallPin,MainFanEnablPin,MainFanCurrentPin);
 
 FanManager secondaryFan(SecondaryFanPWMPin,SecondaryFanHallPin,SecondaryFanEnablPin,SecondaryFanCurrentPin);
@@ -56,12 +64,17 @@ Potentiometer consigneExterne(PotentiometerPin);
 
 HCSR04 heightSensor(HS_TrigPin, HS_EchoPin);
 
+LED ledBp1(BP1_LedPin);
+LED ledBp2(BP2_LedPin);
+
+Button Bp1(BP1_SigPin);
+Button Bp2(BP2_LedPin);
 /*********************************************************
           GESTION DES INTERRUPTIONS (HARDWARE)
 **********************************************************/
 /*
 Afin de pouvoir évaluer la vitesse des ventilateurs, il est
-nécéssaire de comter les impulsions des capteurs Hall des
+nécéssaire de compter les impulsions des capteurs Hall des
 ventilateurs.
 La fonction de callback ne peut pas être une méthode de classe,
 a moins qu'elle soit statique. Comme on a deux ventilateur,
@@ -332,10 +345,35 @@ void setup()
   
   Serial.begin(115200);
   
+  ledBp1.begin(1000);
+  ledBp2.begin(500);
+  Bp1.begin();
+	Bp2.begin();
 }
 
 void loop() //monitoring_Task
 {
   timerSoft.run();
   timerHard.run();
+  //ledBp1.blink(0, 1000);
+  //ledBp2.blink(0, 500);
+
+  if (Bp1.pressed())
+  {
+    ledBp1.on();
+  }
+  else
+  {
+    ledBp1.off();
+  }
+
+  if (Bp2.toggled())
+  {
+    ledBp2.on();
+  }
+  else
+  {
+    ledBp2.off();
+  }
+
 }
