@@ -20,7 +20,7 @@ float _secondaryFanSpeed;
 float _plotHeight;
 float _externalSetpoint;
 float _fan2Setpoint=0.5;
-float _Quiet=LOW;
+float _Quiet=HIGH;
 
 long int tExecSpeedTask;
 long int tExecPosTask;
@@ -156,8 +156,7 @@ void speed_Ctrl_Task()
   else
   {
     mainFan.setSpeedProp(float(_externalSetpoint/100));
-    secondaryFan.setSpeedProp(float(_externalSetpoint/100));
-    //secondaryFan.setSpeedProp(_fan2Setpoint);
+    secondaryFan.setSpeedProp(_fan2Setpoint);
   }
 
   //Output
