@@ -2,7 +2,7 @@
 #include "FanManager.h"
 #include "Potentiometer.h"
 #include "HCSR04.h"
-#include <SimpleTimer.h>
+#include "SimpleTimer_TheTube.h"
 
 
 /*********************************************************
@@ -210,23 +210,23 @@ void user_Ctrl_Task()
     {
       NVIC_SystemReset();                         // Reset the microcontroller
     }
-    else if(command.indexOf("Kp") == 0) //The command format must be Kp=xx.xx
+    else if(command.indexOf("kp") == 0) //The command format must be Kp=xx.xx
     {
       //Kp=command.substring(3).toDouble();
     }
-    else if(command.indexOf("Ki") == 0) //The command format must be Ki=xx.xx
+    else if(command.indexOf("ki") == 0) //The command format must be Ki=xx.xx
     {
       //Ki=command.substring(3).toDouble();
     }
-    else if(command.indexOf("Kd") == 0) //The command format must be Kd=xx.xx
+    else if(command.indexOf("kd") == 0) //The command format must be Kd=xx.xx
     {
       //Kd=command.substring(3).toDouble();
     }
-    else if(command.indexOf("Fan2") == 0) //The command format must be Fan2=xx.xx
+    else if(command.indexOf("fan2") == 0) //The command format must be Fan2=xx.xx
     {
       _fan2Setpoint=command.substring(5).toDouble();
     }
-     else if(command.equals("Quiet")) 
+     else if(command.equals("quiet")) 
     {
       _Quiet=!_Quiet;
     }
