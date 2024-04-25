@@ -9,7 +9,7 @@
            INSTANCIATION DES PERIPHERIQUES
 **********************************************************/
 int i=0;
-bool start = true;
+bool start = false;
 bool ramp = false;
 int setpointRPM;
 int realSetpoint;
