@@ -89,12 +89,13 @@ void setupFanInterrupts()
 /*
 Le programme est séparé en plusieurs tâches.
 Afin d'avoir un minimum de synchronisation dans l'ordre des opérations, 
-on utilisera un timer hardware principal, qui sera chargé d'éxécuter
-les différentes autres tâches critiques avec un système de diviseurs.
-La tâche user_Ctrl, moins critique au niveau du timing, sest gérée par un 
-timer software (moins précis, soft realtime)
-La tâche monitoring est séparée du reste et appelée dans la
-loop() arduino. Elle est rythmée par une pause, ce qui ne la rend pas temps réel.
+on utilisera un premier timer software pour les actions les plus critiques 
+de régulation, qui sera chargé d'éxécuter les différentes tâches 
+avec un système de diviseurs.
+Un deuxipme timer software sera chargé de la tâche user_Ctrl, moins 
+critique au niveau du timing, insi que le tâche monitoring qui
+ne doit pas être exécutée plus souvent que nécéssaire afin de ne pas
+surcharger le système.
 
 Vous pouvez librement adapter la porposition ci-dessous, mais n'oubliez pas de
 le justifier dans la rapport, ce qui me permettra de comprendre plus façilement
@@ -109,7 +110,7 @@ Chacune de ces tâches sera organisée en terme de séquencement.
 On commence par récupérer les valeurs (Input), on calcul ensuite les sorties (Compute)
 puis on affecte finnalement les sorties physiques ou de la tâche suivante (Ouput).
 
-Le rôle de chacune des tâches est décrit ci-dessous:
+Le rôle de chacune des tâches est proposé ci-dessous:
 
 speed_Ctrl_Task:
   - Récupère la valeur de la vitesse des ventilateur
@@ -132,7 +133,7 @@ user_Ctrl_Task:
 monitoring_Task
   - fait une copie des dernières valeurs à remonter
   - Met en forme pour l'affichage
-  - Envoie la tramme sur le sortie serielle
+  - Envoie la tramme sur la sortie serielle
 
 NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la base de l'application.
 */
