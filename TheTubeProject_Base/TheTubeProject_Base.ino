@@ -11,6 +11,7 @@
 int i=0;
 bool start = false;
 bool ramp = false;
+bool contest = false;
 int setpointRPM;
 int realSetpoint;
 String command;
@@ -20,6 +21,7 @@ float _secondaryFanSpeed;
 float _plotHeight;
 float _externalSetpoint;
 float _fan2Setpoint=0.5;
+float _lastTrajSetpoint=0;
 float _Quiet=HIGH;
 
 long int tExecSpeedTask;
@@ -138,7 +140,7 @@ monitoring_Task
 NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la base de l'application.
 */
 
-#define MONITOR 
+//#define MONITOR 
 //#define PLOT_TIMINGS
 
 
@@ -153,6 +155,11 @@ void speed_Ctrl_Task()
   {
     mainFan.setSpeedProp(0);
     secondaryFan.setSpeedProp(0);
+  }
+  if(contest)
+  {
+    mainFan.setSpeedProp(float(_lastTrajSetpoint/100));
+    secondaryFan.enableRotation(false);
   }
   else
   {
@@ -192,6 +199,7 @@ void user_Ctrl_Task()
     if(command.equals("start"))
     {
       start = true;
+      contest = false;
       _Quiet = LOW;
     }
     else if(command.equals("inc"))
@@ -226,9 +234,22 @@ void user_Ctrl_Task()
     {
       _fan2Setpoint=command.substring(5).toDouble();
     }
-     else if(command.equals("quiet")) 
+     else if(command.indexOf("quiet") != -1) //Si on détecte un quiet
     {
       _Quiet=!_Quiet;
+    }
+    else if(command.equals("contest"))
+    {
+      contest = true;
+      start = false;
+      _Quiet = LOW;
+      _lastTrajSetpoint = 0;
+    }
+    else if(command.indexOf("traj") == 0) //The command format must be traj=<time>;<setpoint>
+    {
+      _lastTrajSetpoint = command.substring(21).toDouble(); //Interprétation de la commande et récupération de la valeur de consigne
+      Serial.println(command.substring(5,command.length()-1) + ";" + String(float(_mainFanSpeed)/145.0));
+      //Serial.println(command.substring(5,command.length()-1) + ";" + String(_plotHeight)); //Réponse avec les informations reçue + la position actuelle 
     }
     else
     {
