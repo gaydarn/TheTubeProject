@@ -3,15 +3,13 @@
 #include "Potentiometer.h"
 #include "HCSR04.h"
 #include "SimpleTimer_TheTube.h"
+#include "ModeManager.h"
 
 
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
 **********************************************************/
 int i=0;
-bool start = false;
-bool ramp = false;
-bool contest = false;
 int setpointRPM;
 int realSetpoint;
 String command;
@@ -52,18 +50,26 @@ FanManager secondaryFan(SecondaryFanPWMPin,SecondaryFanHallPin,SecondaryFanEnabl
 Potentiometer consigneExterne(PotentiometerPin);
 
 HCSR04 heightSensor(HS_TrigPin, HS_EchoPin);
+
+ModeManager modeManager;
+
 /*********************************************************
           GESTION DES INTERRUPTIONS (HARDWARE)
 **********************************************************/
 /*
-Afin de pouvoir évaluer la vitesse des ventilateurs, il est
-nécéssaire de compter les impulsions des capteurs Hall des
-ventilateurs.
+Afin de pouvoir évaluer la vitesse des ventilateurs, nous avons choisi
+de compter les impulsions des capteurs Hall des ventilateurs.
 La fonction de callback ne peut pas être une méthode de classe,
 a moins qu'elle soit statique. Comme on a deux ventilateur,
 On a choisi de créer des fonction de callback dans le code 
-principal, qui vont elle-même apeler en cascade les méthode
+principal, qui vont elle-même appeler en cascade les méthodes
 des deux instances de ventilateurs.
+
+NOTE: Il est possible également d'utiliser un concept différent 
+qui consiste à mesurer le temps entre deux pulse du ventilateur.
+Cette manière de faire est un peu plus rapide, et pourrait
+faire partie des optimisations si vous identifiez que le temps de 
+tâche de la boucle de vitesse est problématique.
 */
 
 void mainFan_incRpmCounter()
@@ -91,40 +97,39 @@ void setupFanInterrupts()
 /*
 Le programme est séparé en plusieurs tâches.
 Afin d'avoir un minimum de synchronisation dans l'ordre des opérations, 
-on utilisera un premier timer software pour les actions les plus critiques 
-de régulation, qui sera chargé d'éxécuter les différentes tâches 
+on utilisera un premier timer software pour les actions  
+de régulation, qui sera chargé d'éxécuter les différentes boucles (vitesse/position) 
 avec un système de diviseurs.
-Un deuxipme timer software sera chargé de la tâche user_Ctrl, moins 
-critique au niveau du timing, insi que le tâche monitoring qui
+Un deuxième timer software sera chargé de la tâche user_Ctrl, moins 
+critique au niveau du timing, ainsi que de le tâche monitoring qui
 ne doit pas être exécutée plus souvent que nécéssaire afin de ne pas
 surcharger le système.
 
-Vous pouvez librement adapter la porposition ci-dessous, mais n'oubliez pas de
-le justifier dans la rapport, ce qui me permettra de comprendre plus façilement
+Vous pouvez librement adapter la proposition ci-dessous, mais n'oubliez pas de
+l'expliquez dans la rapport, ce qui me permettra de comprendre plus façilement
 ce que vous avez fait.
 
 Attention, l'utilisation de la communication serielle n'est pas anodine en terme
 de consommation des ressources. Veillez à limiter au maximum les print dans les
-tâches synchronisées et laissez dans la mesure du possible cette tâche à la
+tâches "rapides" et laissez dans la mesure du possible cette tâche à la
 tâche de monitoring.
 
 Chacune de ces tâches sera organisée en terme de séquencement.
-On commence par récupérer les valeurs (Input), on calcul ensuite les sorties (Compute)
-puis on affecte finnalement les sorties physiques ou de la tâche suivante (Ouput).
+On commence par récupérer les valeurs (Input), on calcul ensuite les valeurs (Compute)
+qu'on affecte finalement aux sorties physiques ou de la tâche suivante (Ouput).
 
 Le rôle de chacune des tâches est proposé ci-dessous:
 
-speed_Ctrl_Task:
-  - Récupère la valeur de la vitesse des ventilateur
-  - Récupère la dernière consigne de vitesse
-  - Calcule la nouvelle sortie/correction
-  - Affecte la sortie sur le pwm
+fan_Ctrl_Task:
+  - Récupère la vitesse réelle des ventilateur
+  - Récupère la vitesse de consigne de la boucle de position/vitesse
+  - Affecte le PWM sur les ventilateur
 
 position_Ctrl_Task:
   - Récupère la valeur de position du capteur
   - Récupère la dernière consigne de position
   - Calcule la nouvelle sortie/correction
-  - Affecte la sortie pour la boucle de vitesse
+  - Affecte la sortie pour la tâche de gestion des ventilateurs
 
 user_Ctrl_Task:
   - Récupère la dernière consigne selon le mode
@@ -140,36 +145,49 @@ monitoring_Task
 NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la base de l'application.
 */
 
-//#define MONITOR 
+#define MONITOR 
 //#define PLOT_TIMINGS
 
 
-void speed_Ctrl_Task()
+void fan_Ctrl_Task()
 {
   tTemp = micros();
   //Inputs
   _mainFanSpeed = mainFan.computeSpeedRPM();
   _secondaryFanSpeed = secondaryFan.computeSpeedRPM();
   //Compute
-  if(!start)
+  if(modeManager.getMode()==IDLE)
   {
     mainFan.setSpeedProp(0);
     secondaryFan.setSpeedProp(0);
-  }
-  if(contest)
-  {
-    mainFan.setSpeedProp(float(_lastTrajSetpoint/100));
+    mainFan.enableRotation(false);
     secondaryFan.enableRotation(false);
   }
   else
   {
-    mainFan.setSpeedProp(float(_externalSetpoint/100));
-    secondaryFan.setSpeedProp(_fan2Setpoint);
+    if(modeManager.getMode()==CONTEST){
+
+      mainFan.setSpeedProp(float(_lastTrajSetpoint/100)); //Only to test the setpoint form the local client
+      secondaryFan.enableRotation(false);
+
+      //TODO: Régulation en mode concours (consigne externe venant d'un client)
+    }
+    else if(modeManager.getMode()==AUTOMATIC)
+    {
+      //TODO : Régulation en mode automatique (consigne venant du potentiomètre)
+    }
+    else //Default mode if not IDLE -> MANUAL
+    {
+      mainFan.setSpeedProp(float(_externalSetpoint/100));
+      secondaryFan.setSpeedProp(_fan2Setpoint);
+    }
+
+    mainFan.enableRotation(true);
+    secondaryFan.enableRotation(true);
   }
 
   //Output
-  mainFan.enableRotation(!_Quiet);
-  secondaryFan.enableRotation(!_Quiet);
+ 
   tExecSpeedTask = micros() - tTemp;
 }
 
@@ -180,8 +198,10 @@ void position_Ctrl_Task()
   _plotHeight = heightSensor.measureDistance();
  
   //Compute
+  //TODO
 
   //Ouput
+  //TODO
 
   tExecPosTask = micros() - tTemp;
 }
@@ -189,30 +209,39 @@ void position_Ctrl_Task()
 void user_Ctrl_Task()
 {
   tTemp = micros();
+
+  //Récupération de la consigne externe (potentiomètre)
   _externalSetpoint = consigneExterne.getValuePercent();
 
   //Récupération de la commande
   if(Serial.available())
   {
     command = Serial.readStringUntil('\n');
-         
-    if(command.equals("start"))
+
+    if(command.equals("manu"))
     {
-      start = true;
-      contest = false;
-      _Quiet = LOW;
+      Serial.println("Switch to manual mode");
+      modeManager.setMode(MANUAL);
+      
+    }    
+    else if(command.equals("start") || command.equals("auto"))
+    {
+      Serial.println("Switch to automatic mode");
+      modeManager.setMode(AUTOMATIC);
+      
     }
-    else if(command.equals("inc"))
+    else if(command.equals("contest"))
     {
-      i++;
+      Serial.println("Switch to contest mode");
+      modeManager.setMode(CONTEST);
+      
+      _lastTrajSetpoint = 0;
     }
-    else if(command.equals("dec"))
+    else if(command.equals("stop") || command.equals("quiet"))
     {
-      i--;
-    }
-    else if(command.equals("stop"))
-    {
-      start = false;
+      Serial.println("Switch to idle mode");
+      modeManager.setMode(IDLE);
+      
     }
     else if(command.equals("reset"))
     {
@@ -234,26 +263,14 @@ void user_Ctrl_Task()
     {
       _fan2Setpoint=command.substring(5).toDouble();
     }
-     else if(command.indexOf("quiet") != -1) //Si on détecte un quiet
-    {
-      _Quiet=!_Quiet;
-    }
-    else if(command.equals("contest"))
-    {
-      contest = true;
-      start = false;
-      _Quiet = LOW;
-      _lastTrajSetpoint = 0;
-    }
     else if(command.indexOf("traj") == 0) //The command format must be traj=<time>;<setpoint>
     {
       _lastTrajSetpoint = command.substring(21).toDouble(); //Interprétation de la commande et récupération de la valeur de consigne
-      Serial.println(command.substring(5,command.length()-1) + ";" + String(float(_mainFanSpeed)/145.0));
-      //Serial.println(command.substring(5,command.length()-1) + ";" + String(_plotHeight)); //Réponse avec les informations reçue + la position actuelle 
+      Serial.println(command.substring(5,command.length()-1) + ";" + String(_plotHeight)); //Réponse avec les informations reçue + la position actuelle 
     }
     else
     {
-      Serial.println("Invalid command");
+      Serial.println("ERROR : Invalid command!");
     }
   }
 
@@ -278,6 +295,8 @@ void monitoring_Task()
   Serial.print (realSetpoint, DEC);
   Serial.print (",HS_value:");
   Serial.print (_plotHeight,1);
+  Serial.print (",ActualMode:");
+  Serial.print (modeManager.getMode(),1);
   Serial.print ("\r\n");
 #endif
 
@@ -292,12 +311,12 @@ void monitoring_Task()
     tExecMonTask = micros() - tTemp;
 }
 
-#define SPEED_TASK_PERIOD_MS 60
+#define FAN_TASK_PERIOD_MS 60
 #define POS_TASK_MUL  2 //Give position task time = POS_TASK_MUL*SPEED_TASK_PERIOD
 #define USER_TASK_MUL  2 //Give user task time = USER_TASK_MUL*SPEED_TASK_PERIOD
 #define MON_TASK_MUL  4 //Give monitoring task time = MON_TASK_MUL*SPEED_TASK_PERIOD
 
-#define TIMER_INTERVAL_US        SPEED_TASK_PERIOD_MS*1000      // 1s = 1 000 000us
+#define TIMER_INTERVAL_US        FAN_TASK_PERIOD_MS*1000      // 1s = 1 000 000us
 
 // the soft timer object
 SimpleTimer timerSoft;
@@ -315,7 +334,7 @@ void HandlerTickTaskHard()
   }  
   counterHard++;
 
-  speed_Ctrl_Task();
+  fan_Ctrl_Task();
 }
 
 void HandlerTickTaskSoft() {
@@ -341,11 +360,14 @@ void setup()
 
   setupFanInterrupts();
 
-  timerHard.setInterval(SPEED_TASK_PERIOD_MS, HandlerTickTaskHard);
+  timerHard.setInterval(FAN_TASK_PERIOD_MS, HandlerTickTaskHard);
 
-  timerSoft.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
+  timerSoft.setInterval(FAN_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
   
   Serial.begin(115200);
+
+  // Définir le mode initial
+  modeManager.setMode(MANUAL);
 
 }
 
