@@ -22,7 +22,9 @@ float Potentiometer::getValueProp()
   sensorValue = ((sensorValue < ANALOG_VAL_0) ? 0 : sensorValue - ANALOG_VAL_0);
   sensorValue = ((sensorValue > ANALOG_VAL_100) ? ANALOG_VAL_100 - ANALOG_VAL_0 : sensorValue);
 
-  return (sensorValue/(ANALOG_VAL_100 - ANALOG_VAL_0));
+  float propValue = (sensorValue/(ANALOG_VAL_100 - ANALOG_VAL_0));
+
+  return 1-propValue; //Potentiomètre inversé, on corrige pour avoir 0% à gauche et 100% à droite
 }
 
 float Potentiometer::getValuePercent()
