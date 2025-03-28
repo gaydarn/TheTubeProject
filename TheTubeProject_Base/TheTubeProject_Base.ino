@@ -218,13 +218,13 @@ void user_Ctrl_Task()
   {
     command = Serial.readStringUntil('\n');
 
-    if(command.equals("manu"))
+    if(command.equals("manu") || command.equals("manual"))
     {
       Serial.println("Switch to manual mode");
       modeManager.setMode(MANUAL);
       
     }    
-    else if(command.equals("start") || command.equals("auto"))
+    else if(command.equals("start") || command.equals("auto") || command.equals("automatic"))
     {
       Serial.println("Switch to automatic mode");
       modeManager.setMode(AUTOMATIC);
