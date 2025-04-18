@@ -145,7 +145,7 @@ monitoring_Task
 NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la base de l'application.
 */
 
-#define MONITOR 
+//#define MONITOR 
 //#define PLOT_TIMINGS
 
 
@@ -168,7 +168,7 @@ void fan_Ctrl_Task()
     if(modeManager.getMode()==CONTEST){
 
       mainFan.setSpeedProp(float(_lastTrajSetpoint/100)); //Only to test the setpoint form the local client
-      secondaryFan.enableRotation(false);
+      secondaryFan.enableRotation(_fan2Setpoint);
 
       //TODO: Régulation en mode concours (consigne externe venant d'un client)
     }
@@ -265,8 +265,9 @@ void user_Ctrl_Task()
     }
     else if(command.indexOf("traj") == 0) //The command format must be traj=<time>;<setpoint>
     {
-      _lastTrajSetpoint = command.substring(21).toDouble(); //Interprétation de la commande et récupération de la valeur de consigne
-      Serial.println(command.substring(5,command.length()-1) + ";" + String(_plotHeight)); //Réponse avec les informations reçue + la position actuelle 
+      _lastTrajSetpoint = command.substring(command.indexOf(";")+1).toDouble(); //Interprétation de la commande et récupération de la valeur de consigne
+      Serial.println("pos=" + command.substring(5,command.length()) + ";" + String(_plotHeight)); //Réponse avec les informations reçue + la position actuelle 
+      //Serial.println(command + ";" + String(_plotHeight)); //Réponse avec les informations reçue + la position actuelle
     }
     else
     {
